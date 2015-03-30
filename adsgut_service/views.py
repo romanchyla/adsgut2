@@ -1,6 +1,8 @@
 from flask import Flask
 from flask import current_app, request
+from flask.ext.login import LoginManager
 import requests
+from models import User
 
 app = Flask(__name__, static_folder=None)
 app.url_map.strict_slashes = False
@@ -10,54 +12,31 @@ try:
 except IOError:
   pass
 
+login_manager = LoginManager()
+login_manager.init_app(app)
 
-@app.route('/exchangeOAuthCode', methods=['GET'])
-def get_access_token():
-    '''Exchange 'code' for 'access_token' data'''
-    payload = dict(request.args)
-    if 'code' not in payload:
-        raise Exception('Parameter code is missing')
-    headers = {'Accept': 'application/json'}
-    data = {
-      'client_id': current_app.config['ORCID_CLIENT_ID'],
-      'client_secret': current_app.config['ORCID_CLIENT_SECRET'],
-      'code': payload['code'][0],
-      'grant_type': 'authorization_code'
-    }
-    #print current_app.config['ORCID_OAUTH_ENDPOINT'], data, headers
-    r = requests.post(current_app.config['ORCID_OAUTH_ENDPOINT'], data=data, headers=headers)
-    return r.text, r.status_code
+@login_manager.request_loader
+def load_user_from_request(request):
 
-@app.route('/<orcid_id>/orcid-profile', methods=['GET', 'POST'])
-def orcid_profile(orcid_id):
-    '''Get/Set /[orcid-id]/orcid-profile - all communication exclusively in JSON'''
-    payload, headers = check_request(request)
-    if request.method == 'GET':
-        r = requests.get(current_app.config['ORCID_API_ENDPOINT'] + '/' + orcid_id + '/orcid-profile',
-                         headers=headers)
-    else:
-        r = requests.post(current_app.config['ORCID_API_ENDPOINT'] + '/' + orcid_id + '/orcid-profile',
-                         json=payload, headers=headers)
-    return r.text, r.status_code
-
-@app.route('/<orcid_id>/orcid-works', methods=['GET', 'POST', 'PUT'])
-def orcid_works(orcid_id):
-    '''Get/Set /[orcid-id]/orcid-works - all communication exclusively in JSON'''
+    user = None
     
-    payload, headers = check_request(request)
-    
-    if request.method == 'GET':
-        r = requests.get(current_app.config['ORCID_API_ENDPOINT'] + '/' + orcid_id + '/orcid-works', 
-                      headers=headers)
-    elif request.method == 'PUT':
-        r = requests.put(current_app.config['ORCID_API_ENDPOINT'] + '/' + orcid_id + '/orcid-works', 
-                      json=payload, headers=headers)
-    elif request.method == 'POST':
-        r = requests.post(current_app.config['ORCID_API_ENDPOINT'] + '/' + orcid_id + '/orcid-works', 
-                      json=payload, headers=headers)
-    return r.text, r.status_code
+    # try to login using User header
+    user_key = request.headers.get('User') or 'Anonymous'
+    if user_key:
+        user = User.query.filter_by(key=user_key).first()
+        if user:
+            return user
+        else:
+            # create a new user
+            return User(key=user_key)
 
-    
+    # finally, return Anonymous
+    return None
+
+@app.route('/library/<operation>', methods=['GET'])
+def library(operation):
+    '''Access point for library operations'''
+    return '{}', 200
 
 def check_request(request):
     
