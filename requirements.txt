@@ -1,0 +1,6 @@
+Flask-SQLAlchemy
+flask-principal
+flask-discoverer
+requests
+alembic
+sqlalchemy-utils
